@@ -16,6 +16,7 @@ let theme = localStorage.getItem('theme') || 'dark';
 // History state
 let historyLog = JSON.parse(localStorage.getItem('reportsHistory')) || [];
 let historyLineChart = null;
+let linksData = [];
 
 // ====== Initialization ======
 document.addEventListener('DOMContentLoaded', () => {
@@ -32,6 +33,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Render Metrics
     renderMetrics();
     updateOverallProgress();
+    renderLinks();
 
     // Setup Listeners
     setupEventListeners();
@@ -52,6 +54,9 @@ function setupEventListeners() {
     document.getElementById('historyBtn').addEventListener('click', openHistoryModal);
     document.getElementById('closeHistoryBtn').addEventListener('click', closeHistoryModal);
     document.getElementById('saveNewReportBtn').addEventListener('click', archiveCurrentReport);
+
+    // Links
+    document.getElementById('addLinkBtn').addEventListener('click', addLink);
 }
 
 // ====== Render UI ======
@@ -106,6 +111,69 @@ function renderMetrics() {
 
         initChart(metric.id, metric.achieved, remaining);
     });
+}
+
+function renderLinks() {
+    const list = document.getElementById('linksList');
+    list.innerHTML = '';
+
+    linksData.forEach(link => {
+        const item = document.createElement('div');
+        item.className = 'link-item';
+        let href = link.url.trim() || '#';
+        if (href !== '#' && !href.startsWith('http')) href = 'https://' + href;
+
+        item.innerHTML = `
+            <div class="link-inputs">
+                <input type="text" placeholder="عنوان الرابط (مثال: فيديو يوتيوب...)" class="glass-input link-title save-target" value="${link.title}">
+                <input type="url" placeholder="الرابط المُرفق (https://...)" class="glass-input link-url save-target" value="${link.url}">
+                <button class="btn-icon remove-link-btn" title="حذف الرابط" onclick="removeLink('${link.id}')">🗑️</button>
+            </div>
+            <div class="link-print-view">
+                <a href="${href}" target="_blank">${link.title || 'رابط بدون عنوان'}</a>
+            </div>
+        `;
+        list.appendChild(item);
+    });
+
+    list.querySelectorAll('.save-target').forEach(el => {
+        el.addEventListener('input', (e) => {
+            updateLinkData(e.target);
+            triggerAutoSave();
+        });
+    });
+}
+
+function addLink() {
+    linksData.push({ id: Date.now().toString(), title: '', url: '' });
+    renderLinks();
+    triggerAutoSave();
+}
+
+function removeLink(id) {
+    if (confirm('هل تريد حذف هذا الرابط؟')) {
+        linksData = linksData.filter(l => l.id !== id);
+        renderLinks();
+        triggerAutoSave();
+    }
+}
+
+function updateLinkData(inputEl) {
+    const itemEl = inputEl.closest('.link-item');
+    const index = Array.from(itemEl.parentNode.children).indexOf(itemEl);
+    if (index > -1 && linksData[index]) {
+        const title = itemEl.querySelector('.link-title').value;
+        const url = itemEl.querySelector('.link-url').value;
+        linksData[index].title = title;
+        linksData[index].url = url;
+
+        let href = url.trim() || '#';
+        if (href !== '#' && !href.startsWith('http')) href = 'https://' + href;
+
+        const aTag = itemEl.querySelector('.link-print-view a');
+        aTag.textContent = title || 'رابط بدون عنوان';
+        aTag.href = href;
+    }
 }
 
 function initChart(id, achieved, remaining) {
@@ -370,7 +438,8 @@ function saveData() {
             inProgressTasks: document.getElementById('inProgressTasks').value,
             uncompletedTasks: document.getElementById('uncompletedTasks').value,
             notes: document.getElementById('notes').value
-        }
+        },
+        links: linksData
     };
 
     localStorage.setItem('weeklyReportData', JSON.stringify(dataToSave));
@@ -397,6 +466,13 @@ function loadData() {
                 document.getElementById('uncompletedTasks').value = data.texts.uncompletedTasks || '';
                 document.getElementById('notes').value = data.texts.notes || '';
             }
+
+            if (data.links) {
+                linksData = data.links;
+            } else {
+                linksData = [];
+            }
+            renderLinks();
         } catch (e) {
             console.error('Error parsing saved data', e);
         }
@@ -407,8 +483,10 @@ function clearData() {
     if (confirm('هل أنت متأكد أنك تريد مسح جميع بيانات التقرير الحالي والبدء من جديد؟ لن يتم مسح الأرشيف.')) {
         localStorage.removeItem('weeklyReportData');
         metricsData = JSON.parse(JSON.stringify(defaultMetricsData));
-        document.querySelectorAll('input[type="number"], input[type="date"], input[type="text"]:not(#creatorName), textarea').forEach(el => el.value = '');
+        linksData = [];
+        document.querySelectorAll('input[type="number"], input[type="date"], input[type="text"]:not(#creatorName), textarea, input[type="url"]').forEach(el => el.value = '');
         renderMetrics();
+        renderLinks();
         updateOverallProgress();
         showToast('تم مسح البيانات والبدء من جديد.', 'warning');
     }
@@ -457,7 +535,8 @@ function archiveCurrentReport() {
                 inProgressTasks: document.getElementById('inProgressTasks').value,
                 uncompletedTasks: document.getElementById('uncompletedTasks').value,
                 notes: document.getElementById('notes').value
-            }
+            },
+            links: JSON.parse(JSON.stringify(linksData))
         }
     };
 
