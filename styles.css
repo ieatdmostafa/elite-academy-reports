@@ -16,6 +16,12 @@
     --stat-bg: rgba(0, 0, 0, 0.2);
     --chart-text: #fff;
     --heading-color: #fff;
+    /* Calendar content type colors */
+    --cal-post: #58a6ff;
+    --cal-carousel: #a371f7;
+    --cal-video: #f85149;
+    --cal-article: #f0c354;
+    --cal-profile: #2ea043;
 }
 
 body.light-mode {
@@ -789,5 +795,318 @@ label {
 
 .exporting body::before,
 .exporting body::after {
+    display: none !important;
+}
+
+/* ====== Content Calendar ====== */
+.calendar-section {
+    margin-top: 0;
+}
+
+.calendar-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    margin-bottom: 1.2rem;
+}
+
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.9rem;
+    color: var(--text-muted);
+    font-weight: 600;
+}
+
+.legend-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    display: inline-block;
+}
+
+.calendar-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 0.8rem;
+}
+
+.cal-day {
+    background: var(--panel-bg);
+    backdrop-filter: blur(var(--blur-amount));
+    border: 1px solid var(--panel-border);
+    border-radius: 12px;
+    padding: 1rem 0.8rem;
+    min-height: 160px;
+    display: flex;
+    flex-direction: column;
+    transition: all 0.3s ease;
+    position: relative;
+}
+
+.cal-day:hover {
+    border-color: var(--primary-color);
+    box-shadow: 0 4px 20px rgba(88, 166, 255, 0.1);
+}
+
+.cal-day.today {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 15px rgba(88, 166, 255, 0.2);
+}
+
+.cal-day.today .cal-day-name::after {
+    content: ' (اليوم)';
+    color: var(--primary-color);
+    font-size: 0.75rem;
+}
+
+.cal-day.drag-over {
+    border-color: var(--accent-gold);
+    background: rgba(210, 168, 255, 0.08);
+    box-shadow: 0 0 20px rgba(210, 168, 255, 0.2);
+}
+
+.cal-day-name {
+    font-weight: 700;
+    font-size: 0.95rem;
+    color: var(--heading-color);
+    margin-bottom: 0.6rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px dashed var(--panel-border);
+    text-align: center;
+}
+
+.cal-day-items {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    min-height: 50px;
+}
+
+.cal-chip {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.35rem 0.6rem;
+    border-radius: 6px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    cursor: grab;
+    position: relative;
+    transition: all 0.2s ease;
+    color: #fff;
+}
+
+.cal-chip:active {
+    cursor: grabbing;
+    opacity: 0.7;
+}
+
+.cal-chip.type-post {
+    background: var(--cal-post);
+}
+
+.cal-chip.type-carousel {
+    background: var(--cal-carousel);
+}
+
+.cal-chip.type-video {
+    background: var(--cal-video);
+}
+
+.cal-chip.type-article {
+    background: var(--cal-article);
+    color: #1a1a1a;
+}
+
+.cal-chip.type-profile {
+    background: var(--cal-profile);
+}
+
+.cal-chip:hover {
+    transform: scale(1.03);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.cal-chip .chip-delete {
+    margin-right: auto;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.2s;
+    font-size: 0.8rem;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 50%;
+    width: 18px;
+    height: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.cal-chip:hover .chip-delete {
+    opacity: 1;
+}
+
+.cal-day-add {
+    margin-top: auto;
+    padding-top: 0.5rem;
+    text-align: center;
+}
+
+.cal-day-add button {
+    background: none;
+    border: 1px dashed var(--panel-border);
+    color: var(--text-muted);
+    border-radius: 6px;
+    padding: 0.3rem;
+    width: 100%;
+    cursor: pointer;
+    font-family: var(--font-family);
+    font-size: 0.85rem;
+    transition: all 0.2s;
+}
+
+.cal-day-add button:hover {
+    border-color: var(--primary-color);
+    color: var(--primary-color);
+    background: rgba(88, 166, 255, 0.05);
+}
+
+/* ====== Performance Metrics ====== */
+.performance-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 1.5rem;
+}
+
+.perf-card {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.perf-inputs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+
+.perf-inputs .input-group {
+    flex: 1;
+    min-width: 130px;
+}
+
+/* ====== Templates ====== */
+.templates-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 1rem;
+}
+
+.template-card {
+    background: var(--input-bg);
+    border: 1px solid var(--panel-border);
+    border-radius: 12px;
+    padding: 1.2rem;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    text-align: center;
+    position: relative;
+}
+
+.template-card:hover {
+    border-color: var(--primary-color);
+    transform: translateY(-3px);
+    box-shadow: 0 6px 20px rgba(88, 166, 255, 0.15);
+}
+
+.template-card .template-icon {
+    font-size: 2.5rem;
+    margin-bottom: 0.6rem;
+}
+
+.template-card .template-name {
+    font-weight: 700;
+    color: var(--heading-color);
+    font-size: 1rem;
+    margin-bottom: 0.3rem;
+}
+
+.template-card .template-desc {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    line-height: 1.5;
+}
+
+.template-card .template-delete {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    background: var(--danger);
+    color: #fff;
+    border: none;
+    border-radius: 50%;
+    width: 24px;
+    height: 24px;
+    cursor: pointer;
+    font-size: 0.75rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+
+.template-card:hover .template-delete {
+    opacity: 1;
+}
+
+/* ====== Responsive for calendar ====== */
+@media (max-width: 900px) {
+    .calendar-grid {
+        grid-template-columns: repeat(4, 1fr);
+    }
+}
+
+@media (max-width: 600px) {
+    .calendar-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .performance-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* Print adjustments for new sections */
+@media print {
+
+    .cal-day-add,
+    .cal-chip .chip-delete,
+    .calendar-legend {
+        display: none !important;
+    }
+
+    .cal-day {
+        border: 1px solid #ddd !important;
+        background: transparent !important;
+        min-height: auto !important;
+    }
+
+    .calendar-grid {
+        grid-template-columns: repeat(7, 1fr) !important;
+        gap: 0.3rem !important;
+    }
+
+    .perf-card {
+        break-inside: avoid;
+    }
+}
+
+/* Image export adjustments */
+.exporting .cal-day-add,
+.exporting .cal-chip .chip-delete {
     display: none !important;
 }

@@ -23,6 +23,66 @@ let historyLog = JSON.parse(localStorage.getItem('reportsHistory')) || [];
 let historyLineChart = null;
 let linksData = [];
 
+// Calendar state
+const DAY_NAMES = ['السبت', 'الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة'];
+const CONTENT_TYPES = {
+    post: { label: '📝 منشور', emoji: '📝' },
+    carousel: { label: '🎠 كاروسيل', emoji: '🎠' },
+    video: { label: '🎬 فيديو', emoji: '🎬' },
+    article: { label: '📰 مقال', emoji: '📰' },
+    profile: { label: '👤 بروفايل', emoji: '👤' }
+};
+let calendarData = DAY_NAMES.map((name, i) => ({ dayIndex: i, dayName: name, items: [] }));
+
+// Performance data state
+let performanceData = {
+    engagementInstagram: '', engagementFacebook: '', engagementLinkedin: '', engagementTiktok: '',
+    weeklyReach: '', weeklyImpressions: '',
+    bestPostTitle: '', bestPostUrl: '',
+    inboxMessages: '', totalComments: '', totalShares: ''
+};
+
+// Templates state
+let customTemplates = JSON.parse(localStorage.getItem('customTemplates')) || [];
+const PREDEFINED_TEMPLATES = [
+    {
+        id: 'normal', icon: '📌', name: 'أسبوع عادي',
+        desc: 'الأهداف الأساسية لأسبوع عمل طبيعي',
+        metrics: [
+            { id: 'regular_posts', title: 'المنشورات العادية', target: 11, achieved: 0 },
+            { id: 'carousel_posts', title: 'المنشورات متعددة الصور (الكاروسيل)', target: 6, achieved: 0 },
+            { id: 'videos', title: 'مقاطع الفيديو', target: 6, achieved: 0 },
+            { id: 'articles', title: 'المقالات', target: 1, achieved: 0 },
+            { id: 'profiles', title: 'الملفات التعريفية (البروفايلات)', target: 1, achieved: 0 },
+            { id: 'followers', title: 'نمو المتابعين', target: 175, achieved: 0 }
+        ]
+    },
+    {
+        id: 'campaign', icon: '🚀', name: 'أسبوع حملة إعلانية',
+        desc: 'أهداف مكثفة لأسبوع حملة تسويقية',
+        metrics: [
+            { id: 'regular_posts', title: 'المنشورات العادية', target: 15, achieved: 0 },
+            { id: 'carousel_posts', title: 'المنشورات متعددة الصور (الكاروسيل)', target: 10, achieved: 0 },
+            { id: 'videos', title: 'مقاطع الفيديو', target: 10, achieved: 0 },
+            { id: 'articles', title: 'المقالات', target: 2, achieved: 0 },
+            { id: 'profiles', title: 'الملفات التعريفية (البروفايلات)', target: 2, achieved: 0 },
+            { id: 'followers', title: 'نمو المتابعين', target: 350, achieved: 0 }
+        ]
+    },
+    {
+        id: 'course_launch', icon: '🎓', name: 'أسبوع إطلاق كورس',
+        desc: 'التركيز على الترويج لكورس جديد',
+        metrics: [
+            { id: 'regular_posts', title: 'المنشورات العادية', target: 14, achieved: 0 },
+            { id: 'carousel_posts', title: 'المنشورات متعددة الصور (الكاروسيل)', target: 8, achieved: 0 },
+            { id: 'videos', title: 'مقاطع الفيديو', target: 12, achieved: 0 },
+            { id: 'articles', title: 'المقالات', target: 3, achieved: 0 },
+            { id: 'profiles', title: 'الملفات التعريفية (البروفايلات)', target: 1, achieved: 0 },
+            { id: 'followers', title: 'نمو المتابعين', target: 500, achieved: 0 }
+        ]
+    }
+];
+
 // ====== Initialization ======
 document.addEventListener('DOMContentLoaded', () => {
     // Current Date
@@ -39,6 +99,7 @@ document.addEventListener('DOMContentLoaded', () => {
     renderMetrics();
     updateOverallProgress();
     renderLinks();
+    renderCalendar();
 
     // Setup Listeners
     setupEventListeners();
@@ -48,6 +109,14 @@ function setupEventListeners() {
     // Auto-save on any input with class 'save-target'
     document.querySelectorAll('.save-target').forEach(el => {
         el.addEventListener('input', triggerAutoSave);
+    });
+
+    // Performance metric inputs
+    document.querySelectorAll('.perf-target').forEach(el => {
+        el.addEventListener('input', () => {
+            syncPerformanceDataFromUI();
+            triggerAutoSave();
+        });
     });
 
     // Controls
@@ -60,7 +129,16 @@ function setupEventListeners() {
     document.getElementById('closeHistoryBtn').addEventListener('click', closeHistoryModal);
     document.getElementById('saveNewReportBtn').addEventListener('click', archiveCurrentReport);
 
-    // Links - Handled inline in HTML output now
+    // Templates Modal
+    document.getElementById('templatesBtn').addEventListener('click', openTemplatesModal);
+    document.getElementById('closeTemplatesBtn').addEventListener('click', closeTemplatesModal);
+    document.getElementById('saveTemplateBtn').addEventListener('click', saveCurrentAsTemplate);
+
+    // Calendar Add Item Modal
+    document.getElementById('closeCalItemBtn').addEventListener('click', () => {
+        document.getElementById('addCalItemModal').classList.remove('active');
+    });
+    document.getElementById('confirmAddCalItem').addEventListener('click', confirmAddCalendarItem);
 }
 
 // ====== Render UI ======
@@ -453,6 +531,8 @@ function triggerAutoSave() {
 }
 
 async function saveData() {
+    syncPerformanceDataFromUI();
+
     const dataToSave = {
         metricsData: metricsData,
         generalInfo: {
@@ -467,7 +547,9 @@ async function saveData() {
             uncompletedTasks: document.getElementById('uncompletedTasks').value,
             notes: document.getElementById('notes').value
         },
-        links: linksData
+        links: linksData,
+        calendar: calendarData,
+        performance: performanceData
     };
 
     // Save locally as fallback/cache
@@ -546,8 +628,23 @@ function applyDataToUI(data) {
     } else {
         linksData = [];
     }
+
+    // Calendar data
+    if (data.calendar && Array.isArray(data.calendar)) {
+        calendarData = data.calendar;
+    } else {
+        calendarData = DAY_NAMES.map((name, i) => ({ dayIndex: i, dayName: name, items: [] }));
+    }
+
+    // Performance data
+    if (data.performance) {
+        performanceData = data.performance;
+        applyPerformanceDataToUI();
+    }
+
     renderMetrics();
     renderLinks();
+    renderCalendar();
     updateOverallProgress();
 }
 
@@ -556,9 +653,17 @@ function clearData() {
         localStorage.removeItem('weeklyReportData');
         metricsData = JSON.parse(JSON.stringify(defaultMetricsData));
         linksData = [];
+        calendarData = DAY_NAMES.map((name, i) => ({ dayIndex: i, dayName: name, items: [] }));
+        performanceData = {
+            engagementInstagram: '', engagementFacebook: '', engagementLinkedin: '', engagementTiktok: '',
+            weeklyReach: '', weeklyImpressions: '',
+            bestPostTitle: '', bestPostUrl: '',
+            inboxMessages: '', totalComments: '', totalShares: ''
+        };
         document.querySelectorAll('input[type="number"], input[type="date"], input[type="text"]:not(#creatorName), textarea, input[type="url"]').forEach(el => el.value = '');
         renderMetrics();
         renderLinks();
+        renderCalendar();
         updateOverallProgress();
         showToast('تم مسح البيانات والبدء من جديد.', 'warning');
     }
@@ -608,7 +713,9 @@ async function archiveCurrentReport() {
                 uncompletedTasks: document.getElementById('uncompletedTasks').value,
                 notes: document.getElementById('notes').value
             },
-            links: JSON.parse(JSON.stringify(linksData))
+            links: JSON.parse(JSON.stringify(linksData)),
+            calendar: JSON.parse(JSON.stringify(calendarData)),
+            performance: JSON.parse(JSON.stringify(performanceData))
         }
     };
 
@@ -808,3 +915,228 @@ function updateHistoryChartTheme() {
         renderHistoryChart();
     }
 }
+
+// ====== Content Calendar ======
+function getTodayDayIndex() {
+    // JS getDay(): 0=Sunday. We want: 0=Saturday
+    const jsDay = new Date().getDay();
+    // Map: Sat=0, Sun=1, Mon=2, Tue=3, Wed=4, Thu=5, Fri=6
+    return jsDay === 6 ? 0 : jsDay + 1;
+}
+
+function renderCalendar() {
+    const grid = document.getElementById('calendarGrid');
+    grid.innerHTML = '';
+    const todayIdx = getTodayDayIndex();
+
+    calendarData.forEach((day, dayIdx) => {
+        const col = document.createElement('div');
+        col.className = 'cal-day' + (dayIdx === todayIdx ? ' today' : '');
+        col.dataset.dayIndex = dayIdx;
+
+        col.innerHTML = `
+            <div class="cal-day-name">${day.dayName}</div>
+            <div class="cal-day-items" data-day="${dayIdx}"></div>
+            <div class="cal-day-add">
+                <button onclick="openAddCalItem(${dayIdx})">+ إضافة</button>
+            </div>
+        `;
+
+        // Drag & Drop zone
+        const itemsContainer = col.querySelector('.cal-day-items');
+        itemsContainer.addEventListener('dragover', e => {
+            e.preventDefault();
+            col.classList.add('drag-over');
+        });
+        itemsContainer.addEventListener('dragleave', () => {
+            col.classList.remove('drag-over');
+        });
+        itemsContainer.addEventListener('drop', e => {
+            e.preventDefault();
+            col.classList.remove('drag-over');
+            const fromDay = parseInt(e.dataTransfer.getData('fromDay'));
+            const itemId = e.dataTransfer.getData('itemId');
+            moveCalendarItem(fromDay, dayIdx, itemId);
+        });
+
+        // Render items
+        (day.items || []).forEach(item => {
+            const chip = document.createElement('div');
+            chip.className = `cal-chip type-${item.type}`;
+            chip.draggable = true;
+            chip.innerHTML = `
+                <span>${CONTENT_TYPES[item.type]?.emoji || ''} ${item.title || CONTENT_TYPES[item.type]?.label || ''}</span>
+                <span class="chip-delete" onclick="removeCalendarItem(${dayIdx}, '${item.id}')">✕</span>
+            `;
+
+            chip.addEventListener('dragstart', e => {
+                e.dataTransfer.setData('fromDay', dayIdx.toString());
+                e.dataTransfer.setData('itemId', item.id);
+                chip.style.opacity = '0.4';
+            });
+            chip.addEventListener('dragend', () => {
+                chip.style.opacity = '1';
+            });
+
+            itemsContainer.appendChild(chip);
+        });
+
+        grid.appendChild(col);
+    });
+}
+
+window.openAddCalItem = function (dayIdx) {
+    document.getElementById('calItemDay').value = dayIdx;
+    document.getElementById('calItemTitle').value = '';
+    document.getElementById('calItemType').value = 'post';
+    document.getElementById('addCalItemModal').classList.add('active');
+};
+
+function confirmAddCalendarItem() {
+    const dayIdx = parseInt(document.getElementById('calItemDay').value);
+    const type = document.getElementById('calItemType').value;
+    const title = document.getElementById('calItemTitle').value.trim();
+
+    if (!calendarData[dayIdx]) return;
+
+    calendarData[dayIdx].items.push({
+        id: Date.now().toString(),
+        type: type,
+        title: title || CONTENT_TYPES[type]?.label || type
+    });
+
+    document.getElementById('addCalItemModal').classList.remove('active');
+    renderCalendar();
+    triggerAutoSave();
+    showToast(`تم إضافة ${CONTENT_TYPES[type]?.label || type} ليوم ${calendarData[dayIdx].dayName}`, 'success');
+}
+
+window.removeCalendarItem = function (dayIdx, itemId) {
+    if (!calendarData[dayIdx]) return;
+    calendarData[dayIdx].items = calendarData[dayIdx].items.filter(i => i.id !== itemId);
+    renderCalendar();
+    triggerAutoSave();
+};
+
+function moveCalendarItem(fromDay, toDay, itemId) {
+    if (fromDay === toDay) return;
+    if (!calendarData[fromDay] || !calendarData[toDay]) return;
+
+    const itemIndex = calendarData[fromDay].items.findIndex(i => i.id === itemId);
+    if (itemIndex === -1) return;
+
+    const [item] = calendarData[fromDay].items.splice(itemIndex, 1);
+    calendarData[toDay].items.push(item);
+
+    renderCalendar();
+    triggerAutoSave();
+    showToast(`تم نقل المحتوى إلى يوم ${calendarData[toDay].dayName}`, 'info');
+}
+
+// ====== Performance Data Sync ======
+const PERF_FIELDS = [
+    'engagementInstagram', 'engagementFacebook', 'engagementLinkedin', 'engagementTiktok',
+    'weeklyReach', 'weeklyImpressions',
+    'bestPostTitle', 'bestPostUrl',
+    'inboxMessages', 'totalComments', 'totalShares'
+];
+
+function syncPerformanceDataFromUI() {
+    PERF_FIELDS.forEach(field => {
+        const el = document.getElementById(field);
+        if (el) performanceData[field] = el.value;
+    });
+}
+
+function applyPerformanceDataToUI() {
+    PERF_FIELDS.forEach(field => {
+        const el = document.getElementById(field);
+        if (el) el.value = performanceData[field] || '';
+    });
+}
+
+// ====== Templates ======
+function openTemplatesModal() {
+    document.getElementById('templatesModal').classList.add('active');
+    renderTemplates();
+}
+
+function closeTemplatesModal() {
+    document.getElementById('templatesModal').classList.remove('active');
+}
+
+function renderTemplates() {
+    // Predefined
+    const predefinedGrid = document.getElementById('predefinedTemplates');
+    predefinedGrid.innerHTML = '';
+    PREDEFINED_TEMPLATES.forEach(t => {
+        const card = document.createElement('div');
+        card.className = 'template-card';
+        card.innerHTML = `
+            <div class="template-icon">${t.icon}</div>
+            <div class="template-name">${t.name}</div>
+            <div class="template-desc">${t.desc}</div>
+        `;
+        card.addEventListener('click', () => loadTemplate(t));
+        predefinedGrid.appendChild(card);
+    });
+
+    // Custom
+    const customGrid = document.getElementById('customTemplatesList');
+    customGrid.innerHTML = '';
+    if (customTemplates.length === 0) {
+        customGrid.innerHTML = '<p style="text-align:center; color: var(--text-muted); grid-column: 1/-1;">لا توجد قوالب محفوظة بعد.</p>';
+        return;
+    }
+    customTemplates.forEach(t => {
+        const card = document.createElement('div');
+        card.className = 'template-card';
+        card.innerHTML = `
+            <button class="template-delete" onclick="event.stopPropagation(); deleteCustomTemplate('${t.id}')">✕</button>
+            <div class="template-icon">📁</div>
+            <div class="template-name">${t.name}</div>
+            <div class="template-desc">تم الحفظ: ${t.dateSaved}</div>
+        `;
+        card.addEventListener('click', () => loadTemplate(t));
+        customGrid.appendChild(card);
+    });
+}
+
+function loadTemplate(template) {
+    if (!confirm(`سيتم تطبيق قالب "${template.name}" على التقرير الحالي. هل تود الاستمرار؟`)) return;
+
+    metricsData = JSON.parse(JSON.stringify(template.metrics));
+    renderMetrics();
+    updateOverallProgress();
+    closeTemplatesModal();
+    triggerAutoSave();
+    showToast(`تم تحميل قالب: ${template.name}`, 'success');
+    triggerConfetti();
+}
+
+function saveCurrentAsTemplate() {
+    const name = prompt('أدخل اسم القالب:');
+    if (!name || !name.trim()) return;
+
+    const template = {
+        id: Date.now().toString(),
+        name: name.trim(),
+        icon: '📁',
+        desc: `قالب مخصص`,
+        dateSaved: new Date().toLocaleDateString('ar-EG'),
+        metrics: JSON.parse(JSON.stringify(metricsData))
+    };
+
+    customTemplates.push(template);
+    localStorage.setItem('customTemplates', JSON.stringify(customTemplates));
+    renderTemplates();
+    showToast(`تم حفظ القالب: ${name}`, 'success');
+}
+
+window.deleteCustomTemplate = function (id) {
+    if (!confirm('هل تريد حذف هذا القالب؟')) return;
+    customTemplates = customTemplates.filter(t => t.id !== id);
+    localStorage.setItem('customTemplates', JSON.stringify(customTemplates));
+    renderTemplates();
+    showToast('تم حذف القالب.', 'warning');
+};

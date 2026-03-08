@@ -9,18 +9,22 @@ VALUES ('reports-pdf', 'reports-pdf', true)
 ON CONFLICT (id) DO NOTHING;
 
 -- 2. سياسة السماح بالرفع والقراءة للجميع
+DROP POLICY IF EXISTS "Allow public read on reports-pdf" ON storage.objects;
 CREATE POLICY "Allow public read on reports-pdf"
   ON storage.objects FOR SELECT
   USING (bucket_id = 'reports-pdf');
 
+DROP POLICY IF EXISTS "Allow service role upload on reports-pdf" ON storage.objects;
 CREATE POLICY "Allow service role upload on reports-pdf"
   ON storage.objects FOR INSERT
   WITH CHECK (bucket_id = 'reports-pdf');
 
+DROP POLICY IF EXISTS "Allow service role update on reports-pdf" ON storage.objects;
 CREATE POLICY "Allow service role update on reports-pdf"
   ON storage.objects FOR UPDATE
   USING (bucket_id = 'reports-pdf');
 
+DROP POLICY IF EXISTS "Allow service role delete on reports-pdf" ON storage.objects;
 CREATE POLICY "Allow service role delete on reports-pdf"
   ON storage.objects FOR DELETE
   USING (bucket_id = 'reports-pdf');
@@ -95,3 +99,24 @@ SELECT '✅ reports_current has data' as status WHERE EXISTS (SELECT 1 FROM publ
 
 -- 7. التأكد من تفعيل pg_net
 CREATE EXTENSION IF NOT EXISTS pg_net;
+
+-- 8. إعداد pg_cron لتذكيرات منتصف الأسبوع (الأربعاء 10 صباحاً بتوقيت القاهرة = 08:00 UTC)
+-- ملاحظة: يجب تفعيل pg_cron من لوحة تحكم Supabase: Database → Extensions → pg_cron
+-- بعد التفعيل، شغل الأمر التالي:
+/*
+SELECT cron.schedule(
+  'midweek-reminder',
+  '0 8 * * 3',  -- Every Wednesday at 08:00 UTC (10:00 Cairo)
+  $$
+  SELECT net.http_post(
+    url := '<YOUR_SUPABASE_URL>/functions/v1/send-whatsapp-report',
+    headers := jsonb_build_object(
+      'Content-Type', 'application/json',
+      'Authorization', 'Bearer <YOUR_SUPABASE_ANON_KEY>'
+    ),
+    body := '{"type": "reminder"}'::jsonb
+  );
+  $$
+);
+*/
+-- لإلغاء التذكير: SELECT cron.unschedule('midweek-reminder');

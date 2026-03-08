@@ -614,6 +614,88 @@ async function generateReportPDF(reportData: any, weekNum: number): Promise<Uint
         }
     }
 
+    // --- Performance Metrics Section ---
+    const perf = reportData.performance;
+    if (perf) {
+        if (y < 120) {
+            page = pdfDoc.addPage([pageWidth, pageHeight]);
+            y = pageHeight - margin;
+        }
+
+        const perfTitle = processRTL("مقاييس الأداء والتفاعل");
+        const perfTitleW = fontBold.widthOfTextAtSize(perfTitle, 14);
+        page.drawText(perfTitle, {
+            x: pageWidth - margin - perfTitleW,
+            y: y,
+            size: 14,
+            font: fontBold,
+            color: COLORS.darkBlue,
+        });
+        y -= 8;
+        page.drawRectangle({
+            x: pageWidth - margin - perfTitleW, y: y,
+            width: perfTitleW, height: 2,
+            color: COLORS.primaryBlue,
+        });
+        y -= 25;
+
+        // Engagement rates
+        const engagementPlatforms = [
+            { label: 'Instagram', value: perf.engagementInstagram },
+            { label: 'Facebook', value: perf.engagementFacebook },
+            { label: 'LinkedIn', value: perf.engagementLinkedin },
+            { label: 'TikTok', value: perf.engagementTiktok },
+        ].filter(p => p.value);
+
+        if (engagementPlatforms.length > 0) {
+            const engLabel = processRTL("معدل التفاعل:");
+            const engLabelW = fontBold.widthOfTextAtSize(engLabel, 11);
+            page.drawText(engLabel, {
+                x: pageWidth - margin - 10 - engLabelW, y, size: 11, font: fontBold, color: COLORS.darkText,
+            });
+            y -= 18;
+            for (const p of engagementPlatforms) {
+                const line = processRTL(`${p.label}: ${p.value}%`);
+                const lineW = font.widthOfTextAtSize(line, 11);
+                page.drawText(line, {
+                    x: pageWidth - margin - 20 - lineW, y, size: 11, font, color: COLORS.darkText,
+                });
+                y -= 16;
+            }
+            y -= 5;
+        }
+
+        // Reach & Impressions
+        if (perf.weeklyReach || perf.weeklyImpressions) {
+            const reachLine = processRTL(`الوصول: ${perf.weeklyReach || 0} | الانطباعات: ${perf.weeklyImpressions || 0}`);
+            const reachW = font.widthOfTextAtSize(reachLine, 11);
+            page.drawText(reachLine, {
+                x: pageWidth - margin - 10 - reachW, y, size: 11, font, color: COLORS.darkText,
+            });
+            y -= 20;
+        }
+
+        // Best Post
+        if (perf.bestPostTitle) {
+            const bpLabel = processRTL(`أفضل منشور: ${perf.bestPostTitle}`);
+            const bpW = font.widthOfTextAtSize(bpLabel, 11);
+            page.drawText(bpLabel, {
+                x: pageWidth - margin - 10 - bpW, y, size: 11, font: fontBold, color: COLORS.success,
+            });
+            y -= 20;
+        }
+
+        // Messages & Comments
+        if (perf.inboxMessages || perf.totalComments || perf.totalShares) {
+            const msgLine = processRTL(`رسائل: ${perf.inboxMessages || 0} | تعليقات: ${perf.totalComments || 0} | مشاركات: ${perf.totalShares || 0}`);
+            const msgW = font.widthOfTextAtSize(msgLine, 11);
+            page.drawText(msgLine, {
+                x: pageWidth - margin - 10 - msgW, y, size: 11, font, color: COLORS.darkText,
+            });
+            y -= 20;
+        }
+    }
+
     // --- Footer ---
     const lastPage = pdfDoc.getPages()[pdfDoc.getPageCount() - 1];
     // Footer line
@@ -650,7 +732,14 @@ async function generateReportPDF(reportData: any, weekNum: number): Promise<Uint
 // ====== Main Handler ======
 serve(async (req) => {
     try {
-        console.log("=== Weekly Report Function Started ===");
+        // Parse request body to check for reminder mode
+        let requestBody: any = {};
+        try {
+            requestBody = await req.json();
+        } catch { /* no body or not JSON, that's fine */ }
+
+        const isReminder = requestBody?.type === 'reminder';
+        console.log(`=== Weekly Report Function Started (${isReminder ? 'REMINDER' : 'FULL REPORT'}) ==="`);
 
         // 1. Connect to database
         const supabase = createClient(supabaseUrl, supabaseServiceKey);
@@ -674,6 +763,75 @@ serve(async (req) => {
         const weekNum = currentReport.week_number || 0;
         console.log(`Report found: Week ${weekNum}`);
 
+        // Calculate progress
+        let totalTarget = 0;
+        let totalAchieved = 0;
+        if (reportData.metricsData) {
+            reportData.metricsData.forEach((m: any) => {
+                totalTarget += m.target || 0;
+                totalAchieved += Math.min(m.achieved || 0, m.target || 0);
+            });
+        }
+        const progress = totalTarget > 0 ? Math.round((totalAchieved / totalTarget) * 100) : 0;
+
+        // === REMINDER MODE ===
+        if (isReminder) {
+            console.log("Sending mid-week reminder...");
+
+            // Calculate what's missing
+            const missing: string[] = [];
+            if (reportData.metricsData) {
+                reportData.metricsData.forEach((m: any) => {
+                    const remaining = (m.target || 0) - (m.achieved || 0);
+                    if (remaining > 0) {
+                        missing.push(`${m.title}: باقي ${remaining}`);
+                    }
+                });
+            }
+
+            const reminderMsg = `
+⏰ *تذكير منتصف الأسبوع - أكاديمية النخبة* ⏰
+
+📅 *الأسبوع رقم:* ${weekNum}
+📊 *الإنجاز الحالي:* ${progress}%
+
+${progress >= 80 ? '🔥 أداء ممتاز! واصل!' : progress >= 50 ? '💪 في المسار الصحيح، كمّل!' : '⚡ محتاج تسرّع شوية!'}
+
+${missing.length > 0 ? `📋 *المتبقي للإنجاز:*
+${missing.map(m => `• ${m}`).join('\n')}` : '✅ كل الأهداف مكتملة!'}
+
+🔗 *التقرير أونلاين:*
+${WEBSITE_URL}
+
+*تذكير تلقائي - نظام إدارة التقارير* 🤖
+            `.trim();
+
+            const sendResponse = await fetch('https://wawp.net/wp-json/awp/v1/send', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    instance_id: WAWP_INSTANCE_ID,
+                    access_token: WAWP_ACCESS_TOKEN,
+                    chatId: `${YOUR_WHATSAPP_NUMBER}@c.us`,
+                    message: reminderMsg,
+                }),
+            });
+            const reminderResult = await sendResponse.text();
+            console.log("Reminder sent:", reminderResult);
+
+            return new Response(JSON.stringify({
+                success: true,
+                type: 'reminder',
+                message: "Mid-week reminder sent",
+                progress: progress,
+                result: reminderResult,
+            }), {
+                headers: { "Content-Type": "application/json" },
+                status: 200,
+            });
+        }
+
+        // === FULL REPORT MODE ===
         // 3. Generate PDF
         console.log("Generating PDF...");
         const pdfBytes = await generateReportPDF(reportData, weekNum);
@@ -702,18 +860,7 @@ serve(async (req) => {
         const pdfPublicUrl = publicUrlData.publicUrl;
         console.log(`PDF uploaded. Public URL: ${pdfPublicUrl}`);
 
-        // 5. Calculate progress for text message
-        let totalTarget = 0;
-        let totalAchieved = 0;
-        if (reportData.metricsData) {
-            reportData.metricsData.forEach((m: any) => {
-                totalTarget += m.target || 0;
-                totalAchieved += Math.min(m.achieved || 0, m.target || 0);
-            });
-        }
-        const progress = totalTarget > 0 ? Math.round((totalAchieved / totalTarget) * 100) : 0;
-
-        // 6. Send PDF via WAWP
+        // 5. Send PDF via WAWP
         console.log("Sending PDF via WAWP...");
         const sendPdfResponse = await fetch('https://wawp.net/wp-json/awp/v1/sendFile', {
             method: 'POST',
@@ -733,7 +880,20 @@ serve(async (req) => {
         const pdfResult = await sendPdfResponse.text();
         console.log("WAWP PDF Response:", pdfResult);
 
-        // 7. Send complementary text message
+        // 6. Build enhanced text message with performance data
+        const perf = reportData.performance || {};
+        let perfSummary = '';
+        if (perf.weeklyReach || perf.engagementInstagram) {
+            perfSummary = `\n📈 *مقاييس الأداء:*`;
+            if (perf.weeklyReach) perfSummary += `\n🌐 الوصول: ${perf.weeklyReach}`;
+            if (perf.weeklyImpressions) perfSummary += ` | الانطباعات: ${perf.weeklyImpressions}`;
+            if (perf.engagementInstagram) perfSummary += `\n📱 تفاعل Instagram: ${perf.engagementInstagram}%`;
+            if (perf.engagementFacebook) perfSummary += `\n📘 تفاعل Facebook: ${perf.engagementFacebook}%`;
+            if (perf.inboxMessages) perfSummary += `\n💬 رسائل: ${perf.inboxMessages}`;
+            if (perf.bestPostTitle) perfSummary += `\n🏆 أفضل منشور: ${perf.bestPostTitle}`;
+            perfSummary += '\n';
+        }
+
         console.log("Sending text summary...");
         const textMessage = `
 🌟 *ملخص التقرير الأسبوعي - أكاديمية النخبة* 🌟
@@ -743,12 +903,12 @@ serve(async (req) => {
 
 ✅ *من أبرز المهام المنجزة:*
 ${reportData.texts?.completedTasks || 'لم يُسجل بعد'}
-
+${perfSummary}
 🔗 *لمشاهدة التقرير أونلاين:*
 ${WEBSITE_URL}
 
 *تم الإرسال تلقائياً عبر نظام إدارة التقارير* 🤖
-    `.trim();
+        `.trim();
 
         const sendTextResponse = await fetch('https://wawp.net/wp-json/awp/v1/send', {
             method: 'POST',
